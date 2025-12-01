@@ -2,9 +2,9 @@ from run_util import run_puzzle
 from operator import add, sub
 from typing import Callable, List, Tuple
 
-def parse_data(data) -> List[Tuple[Callable[[int, int], int], int]]:
+def parse_data(data) -> List[Tuple[str, Callable[[int, int], int], int]]:
     return [
-        (add if line[0] == 'R' else sub, int(line[1:]))
+        (line[0], add if line[0] == 'R' else sub, int(line[1:]))
         for line in data.strip().splitlines()
     ]
 
@@ -13,26 +13,35 @@ def part_a(data):
     data = parse_data(data)
     dial = 50
 
-    positions = []
-
-    for operation, steps in data:
+    zeros = 0
+    for _direction, operation, steps in data:
         dial = operation(dial, steps) % 100
-        positions.append(dial)
 
-    return sum(1 for position in positions if position == 0)
+        if dial == 0:
+            zeros += 1
+    return zeros
 
 
 def part_b(data):
     data = parse_data(data)
     dial = 50
-    positions = []
+    zeros = 0
 
-    for operation, steps in data:
-        for _ in range(steps):
-            dial = operation(dial, 1) % 100
-            positions.append(dial)
+    for direction, operation, steps in data:
 
-    return sum(1 for position in positions if position == 0)
+        new_position = operation(dial, steps) % 100
+        zeros += steps // 100
+
+        if direction == 'R':
+            if new_position < dial:
+                zeros += 1
+        else:  # direction == 'L':
+            if dial != 0 and (new_position > dial or new_position == 0):
+                zeros += 1
+
+        dial = new_position
+
+    return zeros
 
 def main():
     examples = [
