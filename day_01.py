@@ -1,6 +1,8 @@
-from run_util import run_puzzle
 from operator import add, sub
 from typing import Callable, List, Tuple
+
+from run_util import run_puzzle
+
 
 def parse_data(data) -> List[Tuple[str, Callable[[int, int], int], int]]:
     return [
@@ -42,6 +44,7 @@ def part_b(data):
         dial = new_position
 
     return zeros
+
 
 def main():
     examples = [
