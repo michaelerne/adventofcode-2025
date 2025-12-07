@@ -1,6 +1,3 @@
-from collections import deque
-from functools import lru_cache
-
 from run_util import run_puzzle
 
 
@@ -27,34 +24,36 @@ def find_start(grid):
 def part_a(data):
     grid, number_of_rows, number_of_columns, start_row, start_column = parse_data(data)
 
-    visited = set()
-    queue = deque()
-
-    visited.add((start_row, start_column))
-    queue.append((start_row, start_column))
+    reachable_current = [False] * number_of_columns
+    reachable_current[start_column] = True
 
     split_count = 0
 
-    while queue:
-        row_index, column_index = queue.popleft()
-        cell = grid[row_index][column_index]
+    for row_index in range(start_row, number_of_rows):
+        row = grid[row_index]
+        reachable_next = [False] * number_of_columns
 
-        if cell == "^":
-            split_count += 1
-            next_positions = [
-                (row_index + 1, column_index - 1),
-                (row_index + 1, column_index + 1),
-            ]
-        else:
-            next_positions = [
-                (row_index + 1, column_index),
-            ]
+        for column_index in range(number_of_columns):
+            if not reachable_current[column_index]:
+                continue
 
-        for next_row, next_column in next_positions:
-            if 0 <= next_row < number_of_rows and 0 <= next_column < number_of_columns:
-                if (next_row, next_column) not in visited:
-                    visited.add((next_row, next_column))
-                    queue.append((next_row, next_column))
+            cell = row[column_index]
+            if cell == "^":
+                split_count += 1
+                next_row = row_index + 1
+                if next_row < number_of_rows:
+                    left_column = column_index - 1
+                    right_column = column_index + 1
+                    if left_column >= 0:
+                        reachable_next[left_column] = True
+                    if right_column < number_of_columns:
+                        reachable_next[right_column] = True
+            else:
+                next_row = row_index + 1
+                if next_row < number_of_rows:
+                    reachable_next[column_index] = True
+
+        reachable_current = reachable_next
 
     return split_count
 
@@ -62,31 +61,44 @@ def part_a(data):
 def part_b(data):
     grid, number_of_rows, number_of_columns, start_row, start_column = parse_data(data)
 
-    @lru_cache(maxsize=None)
-    def count_paths(row_index, column_index):
-        cell = grid[row_index][column_index]
+    paths_next = [0] * number_of_columns
+    paths_current = [0] * number_of_columns
 
+    bottom_row = number_of_rows - 1
+    row = grid[bottom_row]
+    for col in range(number_of_columns):
+        cell = row[col]
         if cell == "^":
             total_paths = 0
-            for delta_column in (-1, 1):
-                next_row = row_index + 1
-                next_column = column_index + delta_column
-
-                if 0 <= next_row < number_of_rows and 0 <= next_column < number_of_columns:
-                    total_paths += count_paths(next_row, next_column)
+            for delta in (-1, 1):
+                next_col = col + delta
+                if 0 <= next_col < number_of_columns:
+                    total_paths += 1
                 else:
                     total_paths += 1
-            return total_paths
+            paths_next[col] = total_paths
         else:
-            next_row = row_index + 1
-            next_column = column_index
+            paths_next[col] = 1
 
-            if 0 <= next_row < number_of_rows:
-                return count_paths(next_row, next_column)
+    for row_index in range(number_of_rows - 2, -1, -1):
+        row = grid[row_index]
+        for col in range(number_of_columns):
+            cell = row[col]
+            if cell == "^":
+                total_paths = 0
+                for delta in (-1, 1):
+                    next_col = col + delta
+                    if 0 <= next_col < number_of_columns:
+                        total_paths += paths_next[next_col]
+                    else:
+                        total_paths += 1
+                paths_current[col] = total_paths
             else:
-                return 1
+                paths_current[col] = paths_next[col]
 
-    return count_paths(start_row, start_column)
+        paths_next, paths_current = paths_current, paths_next
+
+    return paths_next[start_column]
 
 
 def main():
