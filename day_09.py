@@ -1,134 +1,112 @@
 from run_util import run_puzzle
-
+from itertools import combinations
 
 def parse_data(data):
     return [tuple(map(int, line.strip().split(','))) for line in data.strip().splitlines()]
 
 
 def part_a(data):
-    red_points = parse_data(data)
+    points = parse_data(data)
+    best = 0
 
-    best_area = 0
-    point_count = len(red_points)
+    # return max(
+    #     (abs(x2 - x1) + 1) * (abs(y2 - y1) + 1)
+    #     for (x1, y1), (x2, y2) in combinations(points, 2)
+    #     if x1 != x2 and y1 != y2
+    # )
 
-    for index_a in range(point_count):
-        ax, ay = red_points[index_a]
-        for index_b in range(index_a + 1, point_count):
-            bx, by = red_points[index_b]
+    for (x1, y1), (x2, y2) in combinations(points, 2):
+        if x1 != x2 and y1 != y2:
+            area = (abs(x2 - x1) + 1) * (abs(y2 - y1) + 1)
+            if area > best:
+                best = area
+    return best
 
-            min_x = min(ax, bx)
-            max_x = max(ax, bx)
-            min_y = min(ay, by)
-            max_y = max(ay, by)
 
-            width = max_x - min_x + 1
-            height = max_y - min_y + 1
-            area = width * height
+def build_segments(points):
+    """
+    >>> build_segments([(1,1), (2,1), (2,2)])
+    [((1, 1), (2, 1)), ((2, 1), (2, 2)), ((2, 2), (1, 1))]
+    """
+    return list(zip(points, points[1:] + points[:1]))
 
-            if area > best_area:
-                best_area = area
+def edge_cuts_rectangle(min_x, max_x, min_y, max_y, segments):
+    """
+    >>> segments = [((2,0),(2,5))]
+    >>> edge_cuts_rectangle(1,3,1,3,segments)
+    True
 
-    return best_area
+    >>> segments = [((0,0),(0,5))]
+    >>> edge_cuts_rectangle(1,3,1,3,segments)
+    False
+    """
+    for (x1, y1), (x2, y2) in segments:
+        if x1 == x2:  # vertical
+            sx = x1
+            if not (min_x < sx < max_x):
+                continue
+            lo, hi = sorted((y1, y2))
+            if max(min_y, lo) < min(max_y, hi):
+                return True
+        else:  # horizontal
+            sy = y1
+            if not (min_y < sy < max_y):
+                continue
+            lo, hi = sorted((x1, x2))
+            if max(min_x, lo) < min(max_x, hi):
+                return True
+    return False
 
+def center_inside(min_x, max_x, min_y, max_y, segments):
+    """
+    >>> segments = [((0,0),(4,0)),((4,0),(4,4)),((4,4),(0,4)),((0,4),(0,0))]
+    >>> center_inside(1,3,1,3,segments)
+    True
+
+    >>> center_inside(10,12,10,12,segments)
+    False
+    """
+    cx = (min_x + max_x) / 2.0
+    cy = (min_y + max_y) / 2.0
+
+    crossings = 0
+    for (x1, y1), (x2, y2) in segments:
+        if x1 != x2 or x1 <= cx:
+            continue
+        lo, hi = (y1, y2) if y1 < y2 else (y2, y1)
+        if lo < cy < hi:
+            crossings += 1
+    return crossings % 2 == 1
 
 
 def part_b(data):
-    red_points = parse_data(data)
-
-
-    def is_point_on_segment(px, py, x1, y1, x2, y2):
-        cross = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
-        if abs(cross) > 1e-12:
-            return False
-        if px < min(x1, x2) - 1e-12 or px > max(x1, x2) + 1e-12:
-            return False
-        if py < min(y1, y2) - 1e-12 or py > max(y1, y2) + 1e-12:
-            return False
-        return True
-
-    def is_point_in_polygon(px, py, poly):
-        inside = False
-        n = len(poly)
-        for index in range(n):
-            x1, y1 = poly[index]
-            x2, y2 = poly[(index + 1) % n]
-
-            if is_point_on_segment(px, py, x1, y1, x2, y2):
-                return True
-
-            if (y1 > py) != (y2 > py):
-                x_intersect = (x2 - x1) * (py - y1) / (y2 - y1) + x1
-                if px < x_intersect:
-                    inside = not inside
-
-        return inside
-
-    def get_orientation(ax, ay, bx, by, cx, cy):
-        v = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-        if v > 0:
-            return 1
-        if v < 0:
-            return -1
+    points = parse_data(data)
+    if not points:
         return 0
 
-    def do_segments_strictly_intersect(a1, a2, b1, b2):
-        (x1, y1) = a1
-        (x2, y2) = a2
-        (x3, y3) = b1
-        (x4, y4) = b2
+    segments = build_segments(points)
+    best = 0
 
-        o1 = get_orientation(x1, y1, x2, y2, x3, y3)
-        o2 = get_orientation(x1, y1, x2, y2, x4, y4)
-        o3 = get_orientation(x3, y3, x4, y4, x1, y1)
-        o4 = get_orientation(x3, y3, x4, y4, x2, y2)
+    for (x1, y1), (x2, y2) in combinations(points, 2):
+        if x1 == x2 or y1 == y2:
+            continue
 
-        return (o1 * o2 < 0) and (o3 * o4 < 0)
+        min_x, max_x = min(x1, x2), max(x1, x2)
+        min_y, max_y = min(y1, y2), max(y1, y2)
 
-    def rectangle_inside_polygon(x1, x2, y1, y2, poly):
-        for (cx, cy) in [(x1, y1), (x1, y2), (x2, y1), (x2, y2)]:
-            if not is_point_in_polygon(cx, cy, poly):
-                return False
+        area = (max_x - min_x + 1) * (max_y - min_y + 1)
+        if area <= best:
+            continue
 
-        rectangle_edges = [
-            ((x1, y1), (x2, y1)),
-            ((x2, y1), (x2, y2)),
-            ((x2, y2), (x1, y2)),
-            ((x1, y2), (x1, y1)),
-        ]
+        if edge_cuts_rectangle(min_x, max_x, min_y, max_y, segments):
+            continue
 
-        n = len(poly)
-        for re_a, re_b in rectangle_edges:
-            for index in range(n):
-                pe_a = poly[index]
-                pe_b = poly[(index + 1) % n]
-                if do_segments_strictly_intersect(re_a, re_b, pe_a, pe_b):
-                    return False
+        if not center_inside(min_x, max_x, min_y, max_y, segments):
+            continue
 
-        return True
+        best = area
 
-    polygon = red_points[:]
-
-    best_area = 0
-    point_count = len(red_points)
-
-    for index_a in range(point_count):
-        ax, ay = red_points[index_a]
-        for index_b in range(index_a + 1, point_count):
-            bx, by = red_points[index_b]
-
-            min_x = min(ax, bx)
-            max_x = max(ax, bx)
-            min_y = min(ay, by)
-            max_y = max(ay, by)
-
-            if rectangle_inside_polygon(min_x, max_x, min_y, max_y, polygon):
-                width = max_x - min_x + 1
-                height = max_y - min_y + 1
-                area = width * height
-                if area > best_area:
-                    best_area = area
-
-    return best_area
+    return best
 
 
 def main():
