@@ -37,39 +37,57 @@ def part_a(data):
     )
 
 
-from collections import deque
-
-
 def min_light_presses(pattern_string, buttons):
     num_lights = len(pattern_string)
 
-    goal_mask = sum(
-        1 << i
-        for i, ch in enumerate(pattern_string)
-        if ch == "#"
-    )
-    button_masks = [
-        sum(1 << idx for idx in button)
-        for button in buttons
-    ]
+    goal_mask = sum(1 << i for i, ch in enumerate(pattern_string) if ch == "#")
+    button_masks = [sum(1 << idx for idx in button) for button in buttons]
 
-    visited = [-1] * (1 << num_lights)
-    queue = deque([0])
-    visited[0] = 0
+    start = 0
+    num_states = 1 << num_lights
 
-    while queue:
-        state = queue.popleft()
-        distance = visited[state]
+    visited_fwd = [-1] * num_states
+    visited_bwd = [-1] * num_states
 
-        for mask in button_masks:
-            next_state = state ^ mask
-            if visited[next_state] != -1:
-                continue
+    visited_fwd[start] = 0
+    visited_bwd[goal_mask] = 0
 
-            visited[next_state] = distance + 1
-            if next_state == goal_mask:
-                return distance + 1
-            queue.append(next_state)
+    frontier_fwd = [start]
+    frontier_bwd = [goal_mask]
+
+    while frontier_fwd and frontier_bwd:
+        if len(frontier_fwd) <= len(frontier_bwd):
+            frontier = frontier_fwd
+            visited_this = visited_fwd
+            visited_other = visited_bwd
+            direction = "fwd"
+        else:
+            frontier = frontier_bwd
+            visited_this = visited_bwd
+            visited_other = visited_fwd
+            direction = "bwd"
+
+        new_frontier = []
+        for state in frontier:
+            base_dist = visited_this[state]
+            for mask in button_masks:
+                next_state = state ^ mask
+
+                if visited_this[next_state] != -1:
+                    continue
+
+                visited_this[next_state] = base_dist + 1
+
+                if visited_other[next_state] != -1:
+                    return visited_this[next_state] + visited_other[next_state]
+
+                new_frontier.append(next_state)
+
+        if direction == "fwd":
+            frontier_fwd = new_frontier
+        else:
+            frontier_bwd = new_frontier
+
     return None
 
 
@@ -84,7 +102,6 @@ def part_b(data):
 def min_presses_joltage(joltage_values, buttons):
     m = len(joltage_values)
     n = len(buttons)
-
 
     c = np.ones(n, dtype=float)
     integrality = np.ones(n, dtype=int)
