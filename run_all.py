@@ -12,7 +12,7 @@ def solve_day_part(day_and_part):
     day, part = day_and_part
     title = f'day {day} - part {part}'
 
-    if day == 25 and part != 'a':
+    if day == 12 and part != 'a':
         return title, None
 
     data = get_data(day=day)
@@ -36,6 +36,8 @@ def solve_day_part(day_and_part):
 def main():
     days_solved = max(int(file.split('.')[0][-2:]) for file in os.listdir(os.path.dirname(__file__)) if file.startswith('day_'))
     days_and_parts = itertools.product(range(1, days_solved + 1), ['a', 'b'])
+    days_and_parts = list(days_and_parts)
+    days_and_parts.remove((12, 'b'))
 
     with Pool(processes=32) as pool:
         start = time.perf_counter_ns()
