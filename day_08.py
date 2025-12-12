@@ -1,119 +1,125 @@
+import numpy as np
+from scipy.spatial import Delaunay
+from scipy.spatial.distance import pdist
+
 from run_util import run_puzzle
-import heapq
-from collections import defaultdict
 
 
 def parse_data(data):
-    data = data.strip()
-    return [tuple(map(int, line.split(','))) for line in data.splitlines()]
+    rows = [tuple(map(int, line.split(","))) for line in data.splitlines()]
+    return np.asarray(rows, dtype=np.int64)
 
 
-class DisjointSet:
-    def __init__(self, size):
-        self.parent = list(range(size))
-        self.component_size = [1] * size
-
-    def find(self, index):
-        parent = self.parent
-
-        while parent[index] != index:
-            parent[index] = parent[parent[index]]
-            index = parent[index]
-        return index
-
-    def union(self, index_a, index_b):
-        root_a = self.find(index_a)
-        root_b = self.find(index_b)
-        if root_a == root_b:
-            return False
-
-        size = self.component_size
-        parent = self.parent
-
-        if size[root_a] < size[root_b]:
-            root_a, root_b = root_b, root_a
-        parent[root_b] = root_a
-        size[root_a] += size[root_b]
-        return True
+def dsu_init(n: int):
+    parent = list(range(n))
+    size = [1] * n
+    return parent, size
 
 
-def iter_point_pairs(points):
-    number_of_points = len(points)
-    for index_a in range(number_of_points - 1):
-        x1, y1, z1 = points[index_a]
-        for index_b in range(index_a + 1, number_of_points):
-            x2, y2, z2 = points[index_b]
-            dx = x1 - x2
-            dy = y1 - y2
-            dz = z1 - z2
-            distance_squared = dx * dx + dy * dy + dz * dz
-            yield distance_squared, index_a, index_b
+def dsu_find(parent, x: int) -> int:
+    while parent[x] != x:
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+    return x
+
+
+def dsu_union(parent, size, a: int, b: int) -> bool:
+    ra = dsu_find(parent, a)
+    rb = dsu_find(parent, b)
+    if ra == rb:
+        return False
+    if size[ra] < size[rb]:
+        ra, rb = rb, ra
+    parent[rb] = ra
+    size[ra] += size[rb]
+    return True
+
+
+def _condensed_row_starts(n: int) -> np.ndarray:
+    i = np.arange(n, dtype=np.int64)
+    return n * i - (i * (i + 1)) // 2
+
+
+def _pairs_from_condensed_indices(n: int, k: np.ndarray, starts: np.ndarray):
+    i = np.searchsorted(starts, k, side="right") - 1
+    offset = k - starts[i]
+    j = i + 1 + offset
+    return i.astype(np.int64), j.astype(np.int64)
 
 
 def part_a(data):
     points = parse_data(data)
-    number_of_points = len(points)
+    n = int(points.shape[0])
 
-    # example data
-    if number_of_points == 20:
-        max_pairs_to_keep = 10
-    else:
-        max_pairs_to_keep = 1000
+    k_edges = 10 if n == 20 else 1000
 
-    heap = []
+    dist2 = pdist(points, metric="sqeuclidean")
+    m = dist2.shape[0]
 
-    for distance_squared, index_a, index_b in iter_point_pairs(points):
-        if len(heap) < max_pairs_to_keep:
-            heapq.heappush(heap, (-distance_squared, index_a, index_b))
-        else:
-            if -heap[0][0] > distance_squared:
-                heapq.heapreplace(heap, (-distance_squared, index_a, index_b))
+    k_edges = min(k_edges, m)
+    k_idx = np.argpartition(dist2, k_edges - 1)[:k_edges]
 
-    edges = []
-    while heap:
-        negative_distance, index_a, index_b = heapq.heappop(heap)
-        edges.append((-negative_distance, index_a, index_b))
-    edges.sort(key=lambda entry: entry[0])
+    starts = _condensed_row_starts(n)
+    i, j = _pairs_from_condensed_indices(n, k_idx, starts)
 
-    dsu = DisjointSet(number_of_points)
+    d = dist2[k_idx]
+    order = np.lexsort((j, i, d))
+    i = i[order]
+    j = j[order]
 
-    for distance_squared, index_a, index_b in edges:
-        dsu.union(index_a, index_b)
+    parent, size = dsu_init(n)
 
-    sizes_by_root = defaultdict(int)
-    for index in range(number_of_points):
-        root = dsu.find(index)
-        sizes_by_root[root] += 1
+    for a, b in zip(i, j):
+        dsu_union(parent, size, int(a), int(b))
 
-    all_sizes = sorted(sizes_by_root.values(), reverse=True)
+    counts = {}
+    for idx in range(n):
+        root = dsu_find(parent, idx)
+        counts[root] = counts.get(root, 0) + 1
 
-    return all_sizes[0] * all_sizes[1] * all_sizes[2]
+    sizes = sorted(counts.values(), reverse=True)
+    while len(sizes) < 3:
+        sizes.append(1)
+
+    return sizes[0] * sizes[1] * sizes[2]
 
 
 def part_b(data):
     points = parse_data(data)
-    number_of_points = len(points)
+    n = int(points.shape[0])
 
-    edges = list(iter_point_pairs(points))
-    edges.sort(key=lambda entry: entry[0])
+    tri = Delaunay(points, qhull_options="QJ")
+    simplices = tri.simplices
 
-    dsu = DisjointSet(number_of_points)
+    a = simplices[:, [0, 0, 0, 1, 1, 2]].reshape(-1)
+    b = simplices[:, [1, 2, 3, 2, 3, 3]].reshape(-1)
+    edges = np.stack([a, b], axis=1).astype(np.int64)
 
-    components_remaining = number_of_points
-    last_merge_edge = None
+    edges.sort(axis=1)
+    edges = np.unique(edges, axis=0)
 
-    for distance_squared, index_a, index_b in edges:
-        merged = dsu.union(index_a, index_b)
-        if merged:
-            components_remaining -= 1
-            last_merge_edge = (index_a, index_b)
-            if components_remaining == 1:
-                break
+    i = edges[:, 0]
+    j = edges[:, 1]
 
-    index_a, index_b = last_merge_edge
-    x_a = points[index_a][0]
-    x_b = points[index_b][0]
-    return x_a * x_b
+    dx = points[i, 0] - points[j, 0]
+    dy = points[i, 1] - points[j, 1]
+    dz = points[i, 2] - points[j, 2]
+    dist2 = dx * dx + dy * dy + dz * dz
+
+    order = np.lexsort((j, i, dist2))
+    i = i[order]
+    j = j[order]
+
+    parent, size = dsu_init(n)
+    remaining = n
+
+    for a_idx, b_idx in zip(i, j):
+        if dsu_union(parent, size, int(a_idx), int(b_idx)):
+            remaining -= 1
+            if remaining == 1:
+                return int(points[int(a_idx), 0] * points[int(b_idx), 0])
+
+    return None
 
 
 def main():
@@ -147,5 +153,5 @@ def main():
     run_puzzle(day, part_a, part_b, examples)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
